@@ -1,0 +1,5 @@
+{
+  "name": "Interactive Springs",
+  "description": "A responsive, multi-touch spring physics simulation using P5.js.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,551 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>Interactive Springs</title>
+  <style>
+    html, body {
+      padding: 0;
+      margin: 0;
+      overflow: hidden; /* Prevent scrollbars and bouncing */
+      height: 100%;
+      -webkit-font-smoothing: antialiased;
+      background-color: #000; /* Match canvas background */
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19"></script>
+</head>
+<body>
+  <main></main>
+  <script>
+    // @license
+    // SPDX-License-Identifier: Apache-2.0
+
+    // --- Configuration ---
+    const NUM_BOBS = 8;
+    const BOB_RADIUS = 25;
+
+    // --- Musical Scales ---
+    const scales = {
+        'Major': [0, 2, 4, 5, 7, 9, 11],
+        'Natural Minor': [0, 2, 3, 5, 7, 8, 10],
+        'Harmonic Minor': [0, 2, 3, 5, 7, 8, 11],
+        'Dorian': [0, 2, 3, 5, 7, 9, 10],
+        'Mixolydian': [0, 2, 4, 5, 7, 9, 10],
+        'Blues': [0, 3, 5, 6, 7, 10],
+        'Phrygian': [0, 1, 3, 5, 7, 8, 10],
+        'Pentatonic Major': [0, 2, 4, 7, 9],
+        'Chromatic': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        'Whole Tone': [0, 2, 4, 6, 8, 10],
+    };
+
+    // --- Visualizer Quality Profiles ---
+    const qualityProfiles = {
+        'High':   { numBars: 128, glow: true, corners: true },
+        'Medium': { numBars: 64,  glow: false, corners: true },
+        'Low':    { numBars: 32,  glow: false, corners: false },
+    };
+
+    // --- Simulation Parameters (controlled by GUI) ---
+    const settings = {
+        stiffness: 0.2,
+        damping: 0.92,
+        velocitySmoothing: 0.0,
+        mass: 20,
+        baseMidiNote: 48, // C3
+        selectedScale: 'Major',
+        oscillatorType: 'sine',
+        spectrumSmoothing: 0.8,
+        visualizerQuality: 'Medium', // Default to a safe middle ground
+    };
+    const effectSettings = {
+        reverbEnabled: false,
+        reverbMix: 0.5,
+        reverbDecay: 3,
+        distortionEnabled: false,
+        distortionAmount: 0.25,
+        distortionMix: 0.5,
+    };
+
+    // --- Global State ---
+    let bobs = [];
+    let springs = [];
+    let smoothedAmplitudes = [];
+    let currentNumBars;
+    // A map to keep track of which input (by id) is dragging which bob.
+    const draggedItems = new Map();
+    let audioInitialized = false;
+    let gui;
+    let reverb, distortion, fft;
+    let minFreq, maxFreq;
+
+    // --- Classes ---
+
+    // Represents a single oscillating bob (the circle)
+    class Bob {
+      constructor(x, y, freq) {
+        this.position = createVector(x, y);
+        this.velocity = createVector(0, 0);
+        this.smoothedVelocity = createVector(0, 0);
+        this.acceleration = createVector(0, 0);
+        this.mass = settings.mass;
+        this.radius = BOB_RADIUS;
+        this.isDragging = false;
+        
+        // --- Audio Setup ---
+        this.osc = new p5.Oscillator(settings.oscillatorType);
+        this.osc.freq(freq);
+        this.osc.amp(0);
+        
+        // Connect to the effects chain
+        this.osc.disconnect();
+        this.osc.connect(distortion);
+        
+        this.osc.start();
+      }
+
+      // Apply a force to the bob
+      applyForce(force) {
+        let f = p5.Vector.div(force, this.mass);
+        this.acceleration.add(f);
+      }
+
+      // Update the bob's physics state
+      update() {
+        if (!this.isDragging) {
+          this.velocity.add(this.acceleration);
+          this.velocity.mult(settings.damping); // Use dynamic damping
+
+          // Apply additional velocity smoothing for a less jittery motion
+          const smoothingFactor = 1.0 - settings.velocitySmoothing;
+          this.smoothedVelocity.lerp(this.velocity, smoothingFactor);
+          
+          this.position.add(this.smoothedVelocity); // Use smoothed velocity
+          this.acceleration.mult(0); // Reset acceleration for the next frame
+        }
+      }
+
+      // Draw the bob on the canvas
+      display() {
+        stroke(255);
+        strokeWeight(2);
+        fill(255);
+        ellipse(this.position.x, this.position.y, this.radius * 2, this.radius * 2);
+      }
+
+      // Check if a point (x, y) is inside the bob
+      isOver(x, y) {
+        return dist(x, y, this.position.x, this.position.y) < this.radius;
+      }
+    }
+
+    // Represents a spring connecting a static anchor point to a bob
+    class Spring {
+      constructor(anchor, bob, restLength) {
+        this.anchor = anchor; // p5.Vector
+        this.bob = bob;       // Bob object
+        this.restLength = restLength;
+        this.stiffness = settings.stiffness;
+      }
+
+      // Calculate and apply the spring force to the bob
+      update() {
+        // Calculate the vertical displacement from the rest length
+        let displacement = this.bob.position.y - this.anchor.y;
+        let stretch = displacement - this.restLength;
+
+        // Apply Hooke's Law: F = -k * x
+        let forceY = -1 * this.stiffness * stretch;
+        this.bob.applyForce(createVector(0, forceY));
+      }
+
+      // Draw the spring and its anchor point
+      display() {
+        // Draw the anchor
+        fill(100);
+        noStroke();
+        ellipse(this.anchor.x, this.anchor.y, 10, 10);
+
+        // Draw the spring line
+        stroke(200, 150);
+        strokeWeight(2);
+        line(this.anchor.x, this.anchor.y, this.bob.position.x, this.bob.position.y);
+      }
+    }
+
+    // --- P5.js Core Functions ---
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      
+      // --- Audio Effects Setup ---
+      distortion = new p5.Distortion();
+      reverb = new p5.Reverb();
+      fft = new p5.FFT();
+      
+      // Chain: distortion -> reverb -> master output
+      distortion.disconnect(); // Disconnect from master to connect to reverb
+      distortion.connect(reverb);
+      
+      initializeBobsAndSprings();
+
+      // --- GUI Setup ---
+      gui = new lil.GUI();
+      
+      const visualizerFolder = gui.addFolder('Visualizer');
+      visualizerFolder.add(settings, 'visualizerQuality', Object.keys(qualityProfiles)).name('Quality').onChange(updateVisualizerSettings);
+      visualizerFolder.add(settings, 'spectrumSmoothing', 0, 0.99).name('Smoothing');
+
+      const physicsFolder = gui.addFolder('Physics');
+      physicsFolder.add(settings, 'stiffness', 0.01, 1.0).onChange(value => {
+        for (const spring of springs) {
+            spring.stiffness = value;
+        }
+      });
+      physicsFolder.add(settings, 'damping', 0.8, 1.0);
+      physicsFolder.add(settings, 'velocitySmoothing', 0, 0.99).name('Smoothing');
+      physicsFolder.add(settings, 'mass', 1, 100).onChange(value => {
+        for (const bob of bobs) {
+            bob.mass = value;
+        }
+      });
+      
+      const audioFolder = gui.addFolder('Audio');
+      audioFolder.add(settings, 'baseMidiNote', 36, 72, 1).name('Base MIDI Note').onChange(initializeBobsAndSprings);
+      audioFolder.add(settings, 'selectedScale', Object.keys(scales)).name('Scale').onChange(initializeBobsAndSprings);
+      audioFolder.add(settings, 'oscillatorType', ['sine', 'sawtooth', 'square']).name('Waveform').onChange(value => {
+        for (const bob of bobs) {
+            if (bob.osc) {
+                bob.osc.setType(value);
+            }
+        }
+      });
+
+      // --- Effects GUI ---
+      const effectsFolder = gui.addFolder('Effects');
+      
+      const reverbFolder = effectsFolder.addFolder('Reverb');
+      reverbFolder.add(effectSettings, 'reverbEnabled').name('Enabled').onChange(value => {
+        reverb.drywet(value ? effectSettings.reverbMix : 0);
+      });
+      reverbFolder.add(effectSettings, 'reverbMix', 0, 1).name('Mix').onChange(value => {
+        if (effectSettings.reverbEnabled) {
+          reverb.drywet(value);
+        }
+      });
+      reverbFolder.add(effectSettings, 'reverbDecay', 0, 10).name('Decay').onChange(value => {
+        reverb.set(value);
+      });
+      
+      const distortionFolder = effectsFolder.addFolder('Distortion');
+      distortionFolder.add(effectSettings, 'distortionEnabled').name('Enabled').onChange(value => {
+        distortion.drywet(value ? effectSettings.distortionMix : 0);
+      });
+      distortionFolder.add(effectSettings, 'distortionAmount', 0, 1).name('Amount').onChange(value => {
+        distortion.set(value, '2x');
+      });
+      distortionFolder.add(effectSettings, 'distortionMix', 0, 1).name('Mix').onChange(value => {
+         if (effectSettings.distortionEnabled) {
+          distortion.drywet(value);
+        }
+      });
+      
+      // Initialize effect states based on settings
+      reverb.set(effectSettings.reverbDecay);
+      reverb.drywet(effectSettings.reverbEnabled ? effectSettings.reverbMix : 0);
+      distortion.set(effectSettings.distortionAmount, '2x');
+      distortion.drywet(effectSettings.distortionEnabled ? effectSettings.distortionMix : 0);
+
+      // Initialize visualizer based on default quality
+      updateVisualizerSettings();
+    }
+    
+    function draw() {
+      background(0);
+
+      // --- Audio Spectrum Visualization ---
+      const quality = qualityProfiles[settings.visualizerQuality];
+      
+      fft.analyze();
+      noStroke();
+      
+      colorMode(HSB, 360, 100, 100, 1);
+      
+      if (quality.glow) {
+        drawingContext.shadowBlur = 16;
+      }
+
+      const lowColor = color(200, 40, 95);   // Pastel Blue
+      const midColor = color(220, 35, 90);   // Pastel Bluish-Purple
+      const highColor = color(260, 40, 95); // Pastel Lavender
+
+      const barWidth = width / currentNumBars;
+      const cornerRadius = quality.corners ? 8 : 0;
+      
+      if (minFreq && maxFreq && minFreq < maxFreq) {
+          const logMin = Math.log(minFreq);
+          const logMax = Math.log(maxFreq);
+          const logRange = logMax - logMin;
+
+          for (let i = 0; i < currentNumBars; i++) {
+              const logStart = logMin + (i / currentNumBars) * logRange;
+              const logEnd = logMin + ((i + 1) / currentNumBars) * logRange;
+              const freqStart = Math.exp(logStart);
+              const freqEnd = Math.exp(logEnd);
+
+              const amp = fft.getEnergy(freqStart, freqEnd);
+              
+              smoothedAmplitudes[i] = (amp * (1 - settings.spectrumSmoothing)) + (smoothedAmplitudes[i] * settings.spectrumSmoothing);
+              const smoothedAmp = smoothedAmplitudes[i];
+
+              let barColor;
+              const ampNormalized = smoothedAmp / 255.0;
+              if (ampNormalized < 0.5) {
+                  barColor = lerpColor(lowColor, midColor, ampNormalized * 2);
+              } else {
+                  barColor = lerpColor(midColor, highColor, (ampNormalized - 0.5) * 2);
+              }
+
+              if (quality.glow) {
+                drawingContext.shadowColor = barColor;
+              }
+              fill(barColor); 
+              
+              const barHeight = map(smoothedAmp, 0, 255, 0, height / 2);
+              const x = i * barWidth;
+              
+              rect(x, 0, barWidth, barHeight, 0, 0, cornerRadius, cornerRadius);
+              rect(x, height, barWidth, -barHeight, cornerRadius, cornerRadius, 0, 0);
+          }
+      }
+
+      drawingContext.shadowBlur = 0;
+      colorMode(RGB); // Reset to default color mode
+
+      // --- Physics & Audio Updates ---
+      for (const spring of springs) {
+        spring.update();
+        // spring.display(); // Do not draw the spring or anchor
+        
+        const bob = spring.bob;
+        const distance = abs(bob.position.y - spring.anchor.y);
+        
+        let normalizedDistance = map(distance, 0, height / 2, 0, 1);
+        normalizedDistance = constrain(normalizedDistance, 0, 1);
+
+        let volume = Math.pow(normalizedDistance, 2) * 0.15;
+        
+        if (bob.osc) {
+            bob.osc.amp(volume, 0.05);
+        }
+      }
+
+      // --- Bob Drawing ---
+      for (const bob of bobs) {
+        bob.update();
+        bob.display();
+      }
+      
+      // --- Waveform Visualization (Drawn on top) ---
+      const waveform = fft.waveform();
+      const waveformWidth = width * 0.8;
+      const waveformHeight = 200; 
+      const startX = (width - waveformWidth) / 2;
+
+      noFill();
+      stroke(230, 80, 80); // A warm red
+      strokeWeight(2);
+      beginShape();
+      for (let i = 0; i < waveform.length; i++) {
+        const x = map(i, 0, waveform.length, startX, startX + waveformWidth);
+        const y = map(waveform[i], -1, 1, height / 2 - waveformHeight / 2, height / 2 + waveformHeight / 2);
+        vertex(x, y);
+      }
+      endShape();
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      initializeBobsAndSprings();
+    }
+    
+    // --- Input Handling ---
+
+    function startAudio() {
+        if (!audioInitialized && getAudioContext().state !== 'running') {
+            userStartAudio();
+            audioInitialized = true;
+        }
+    }
+
+    function startDrag(x, y, id) {
+      for (let i = bobs.length - 1; i >= 0; i--) {
+        const bob = bobs[i];
+        if (bob.isOver(x, y) && !draggedItems.has(id)) {
+          bob.isDragging = true;
+          bob.position.y = y;
+          draggedItems.set(id, bob);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function moveDrag(x, y, id) {
+        const draggedBob = draggedItems.get(id);
+        if (draggedBob) {
+            draggedBob.position.y = y;
+        }
+    }
+
+    function endDrag(id) {
+        const draggedBob = draggedItems.get(id);
+        if (draggedBob) {
+            draggedBob.isDragging = false;
+            draggedItems.delete(id);
+        }
+    }
+
+    // Mouse Events
+    function mousePressed(event) {
+      if (event && event.target && typeof event.target.closest === 'function' && event.target.closest('.lil-gui')) {
+        return;
+      }
+      startAudio();
+      startDrag(mouseX, mouseY, 'mouse');
+      return false;
+    }
+
+    function mouseDragged(event) {
+      if (event && event.target && typeof event.target.closest === 'function' && event.target.closest('.lil-gui')) {
+        return;
+      }
+      moveDrag(mouseX, mouseY, 'mouse');
+      return false;
+    }
+
+    function mouseReleased(event) {
+      if (event && event.target && typeof event.target.closest === 'function' && event.target.closest('.lil-gui')) {
+        return;
+      }
+      endDrag('mouse');
+      return false;
+    }
+
+    // Touch Events for Mobile Support
+    function touchStarted(event) {
+      if (event && event.target && event.target.closest('.lil-gui')) {
+        return true;
+      }
+
+      startAudio();
+      
+      let bobWasGrabbed = false;
+      for (const touch of touches) {
+        if (startDrag(touch.x, touch.y, touch.id)) {
+          bobWasGrabbed = true;
+        }
+      }
+      
+      return !bobWasGrabbed;
+    }
+
+    function touchMoved(event) {
+      if (event && event.target && event.target.closest('.lil-gui')) {
+        return true;
+      }
+      
+      let isDraggingBob = false;
+      for (const touch of touches) {
+        if (draggedItems.has(touch.id)) {
+            moveDrag(touch.x, touch.y, touch.id);
+            isDraggingBob = true;
+        }
+      }
+      
+      return !isDraggingBob;
+    }
+
+    function touchEnded(event) {
+      if (event && event.target && event.target.closest('.lil-gui')) {
+        return true;
+      }
+      
+      let aDragHasEnded = false;
+      const currentTouchIds = new Set(touches.map(t => t.id));
+      const idsToEnd = [];
+
+      for (const id of draggedItems.keys()) {
+          if (id !== 'mouse' && !currentTouchIds.has(id)) {
+              idsToEnd.push(id);
+          }
+      }
+      
+      if (idsToEnd.length > 0) {
+        aDragHasEnded = true;
+        idsToEnd.forEach(id => endDrag(id));
+      }
+
+      return !aDragHasEnded;
+    }
+
+    // --- Initialization & Updates ---
+
+    function updateVisualizerSettings() {
+        const quality = qualityProfiles[settings.visualizerQuality];
+        currentNumBars = quality.numBars;
+        // Resize smoothedAmplitudes array, filling new spots with 0
+        smoothedAmplitudes = new Array(currentNumBars).fill(0);
+    }
+
+    function initializeBobsAndSprings() {
+      // Stop and dispose of old oscillators before creating new ones
+      for (const bob of bobs) {
+        if (bob.osc) {
+          bob.osc.disconnect();
+          bob.osc.stop();
+        }
+      }
+      
+      bobs = [];
+      springs = [];
+      draggedItems.clear();
+
+      const spacing = width / (NUM_BOBS + 1);
+      const scaleIntervals = scales[settings.selectedScale];
+      const numIntervals = scaleIntervals.length;
+
+      for (let i = 0; i < NUM_BOBS; i++) {
+        const x = spacing * (i + 1);
+        const anchorY = height / 2;
+        
+        const octave = Math.floor(i / numIntervals);
+        const noteInScale = i % numIntervals;
+        const interval = scaleIntervals[noteInScale];
+        const midiNote = settings.baseMidiNote + (octave * 12) + interval;
+        const freq = midiToFreq(midiNote);
+
+        let bob = new Bob(x, anchorY, freq);
+        bobs.push(bob);
+
+        let anchor = createVector(x, anchorY);
+        let spring = new Spring(anchor, bob, 0);
+        springs.push(spring);
+      }
+      
+      if (bobs.length > 0) {
+        const frequencies = bobs.map(bob => bob.osc.getFreq());
+        minFreq = Math.min(...frequencies);
+        maxFreq = Math.max(...frequencies);
+      }
+    }
+  </script>
+</body>
+</html>
