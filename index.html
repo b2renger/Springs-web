@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,7 +29,7 @@
 
     // --- Configuration ---
     const NUM_BOBS = 8;
-    const BOB_RADIUS = 25;
+    const MIN_GAP = 5; // Minimum gap between bobs and from screen edge
 
     // --- Musical Scales ---
     const scales = {
@@ -78,13 +77,13 @@
 
     // Represents a single oscillating bob (the circle)
     class Bob {
-      constructor(x, y, freq) {
+      constructor(x, y, freq, radius) {
         this.position = createVector(x, y);
         this.velocity = createVector(0, 0);
         this.smoothedVelocity = createVector(0, 0);
         this.acceleration = createVector(0, 0);
         this.mass = settings.mass;
-        this.radius = BOB_RADIUS;
+        this.radius = radius;
         this.isDragging = false;
         
         // --- Audio Setup ---
@@ -202,8 +201,8 @@
       });
       
       const audioFolder = gui.addFolder('Audio');
-      audioFolder.add(settings, 'baseMidiNote', 36, 72, 1).name('Base MIDI Note').onChange(setupSimulation);
-      audioFolder.add(settings, 'selectedScale', Object.keys(scales)).name('Scale').onChange(setupSimulation);
+      audioFolder.add(settings, 'baseMidiNote', 36, 72, 1).name('Base MIDI Note').onChange(() => setupSimulation());
+      audioFolder.add(settings, 'selectedScale', Object.keys(scales)).name('Scale').onChange(() => setupSimulation());
       audioFolder.add(settings, 'oscillatorType', ['sine', 'sawtooth', 'square']).name('Waveform').onChange(value => {
         for (const bob of bobs) {
             if (bob.osc) {
@@ -279,19 +278,20 @@
       fft.analyze();
       const waveform = fft.waveform();
       const waveformWidth = width * 0.8;
-      const waveformHeight = 200; 
+      const waveformHeight = 600;
       const startX = (width - waveformWidth) / 2;
+      const centerY = height / 2;
 
-      noFill();
-      stroke(230, 80, 80); // A warm red
-      strokeWeight(2);
-      beginShape();
+      noStroke();
+      fill(230, 80, 80); // A warm red
+
+      const barWidth = waveformWidth / waveform.length;
       for (let i = 0; i < waveform.length; i++) {
-        const x = map(i, 0, waveform.length, startX, startX + waveformWidth);
-        const y = map(waveform[i], -1, 1, height / 2 - waveformHeight / 2, height / 2 + waveformHeight / 2);
-        vertex(x, y);
+        const x = startX + (i * barWidth);
+        const h = map(abs(waveform[i]), 0, 1, 0, waveformHeight);
+        const y = centerY - h / 2;
+        rect(x, y, barWidth, h);
       }
-      endShape();
     }
 
     function windowResized() {
@@ -447,13 +447,18 @@
         springs = [];
         draggedItems.clear();
 
-        const spacing = width / (NUM_BOBS + 1);
+        // Dynamically calculate bob radius based on screen width
+        const totalGaps = NUM_BOBS + 1;
+        const availableWidthForBobs = width - (totalGaps * MIN_GAP);
+        const bobDiameter = availableWidthForBobs / NUM_BOBS;
+        const bobRadius = Math.max(5, bobDiameter / 2);
+
         for (let i = 0; i < NUM_BOBS; i++) {
-          const x = spacing * (i + 1);
+          const x = MIN_GAP + bobRadius + i * (bobDiameter + MIN_GAP);
           const anchorY = height / 2;
           const freq = getFrequencyForIndex(i);
 
-          let bob = new Bob(x, anchorY, freq);
+          let bob = new Bob(x, anchorY, freq, bobRadius);
           bobs.push(bob);
 
           let anchor = createVector(x, anchorY);
