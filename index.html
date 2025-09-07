@@ -46,13 +46,6 @@
         'Whole Tone': [0, 2, 4, 6, 8, 10],
     };
 
-    // --- Visualizer Quality Profiles ---
-    const qualityProfiles = {
-        'High':   { numBars: 128, glow: true, corners: true },
-        'Medium': { numBars: 64,  glow: false, corners: true },
-        'Low':    { numBars: 32,  glow: false, corners: false },
-    };
-
     // --- Simulation Parameters (controlled by GUI) ---
     const settings = {
         stiffness: 0.2,
@@ -62,8 +55,6 @@
         baseMidiNote: 48, // C3
         selectedScale: 'Major',
         oscillatorType: 'sine',
-        spectrumSmoothing: 0.8,
-        visualizerQuality: 'Medium', // Default to a safe middle ground
     };
     const effectSettings = {
         reverbEnabled: false,
@@ -77,14 +68,11 @@
     // --- Global State ---
     let bobs = [];
     let springs = [];
-    let smoothedAmplitudes = [];
-    let currentNumBars;
     // A map to keep track of which input (by id) is dragging which bob.
     const draggedItems = new Map();
     let audioInitialized = false;
     let gui;
     let reverb, distortion, fft;
-    let minFreq, maxFreq;
 
     // --- Classes ---
 
@@ -194,15 +182,11 @@
       distortion.disconnect(); // Disconnect from master to connect to reverb
       distortion.connect(reverb);
       
-      initializeBobsAndSprings();
+      setupSimulation(true); // Full reset
 
       // --- GUI Setup ---
       gui = new lil.GUI();
       
-      const visualizerFolder = gui.addFolder('Visualizer');
-      visualizerFolder.add(settings, 'visualizerQuality', Object.keys(qualityProfiles)).name('Quality').onChange(updateVisualizerSettings);
-      visualizerFolder.add(settings, 'spectrumSmoothing', 0, 0.99).name('Smoothing');
-
       const physicsFolder = gui.addFolder('Physics');
       physicsFolder.add(settings, 'stiffness', 0.01, 1.0).onChange(value => {
         for (const spring of springs) {
@@ -218,8 +202,8 @@
       });
       
       const audioFolder = gui.addFolder('Audio');
-      audioFolder.add(settings, 'baseMidiNote', 36, 72, 1).name('Base MIDI Note').onChange(initializeBobsAndSprings);
-      audioFolder.add(settings, 'selectedScale', Object.keys(scales)).name('Scale').onChange(initializeBobsAndSprings);
+      audioFolder.add(settings, 'baseMidiNote', 36, 72, 1).name('Base MIDI Note').onChange(setupSimulation);
+      audioFolder.add(settings, 'selectedScale', Object.keys(scales)).name('Scale').onChange(setupSimulation);
       audioFolder.add(settings, 'oscillatorType', ['sine', 'sawtooth', 'square']).name('Waveform').onChange(value => {
         for (const bob of bobs) {
             if (bob.osc) {
@@ -262,72 +246,10 @@
       reverb.drywet(effectSettings.reverbEnabled ? effectSettings.reverbMix : 0);
       distortion.set(effectSettings.distortionAmount, '2x');
       distortion.drywet(effectSettings.distortionEnabled ? effectSettings.distortionMix : 0);
-
-      // Initialize visualizer based on default quality
-      updateVisualizerSettings();
     }
     
     function draw() {
       background(0);
-
-      // --- Audio Spectrum Visualization ---
-      const quality = qualityProfiles[settings.visualizerQuality];
-      
-      fft.analyze();
-      noStroke();
-      
-      colorMode(HSB, 360, 100, 100, 1);
-      
-      if (quality.glow) {
-        drawingContext.shadowBlur = 16;
-      }
-
-      const lowColor = color(200, 40, 95);   // Pastel Blue
-      const midColor = color(220, 35, 90);   // Pastel Bluish-Purple
-      const highColor = color(260, 40, 95); // Pastel Lavender
-
-      const barWidth = width / currentNumBars;
-      const cornerRadius = quality.corners ? 8 : 0;
-      
-      if (minFreq && maxFreq && minFreq < maxFreq) {
-          const logMin = Math.log(minFreq);
-          const logMax = Math.log(maxFreq);
-          const logRange = logMax - logMin;
-
-          for (let i = 0; i < currentNumBars; i++) {
-              const logStart = logMin + (i / currentNumBars) * logRange;
-              const logEnd = logMin + ((i + 1) / currentNumBars) * logRange;
-              const freqStart = Math.exp(logStart);
-              const freqEnd = Math.exp(logEnd);
-
-              const amp = fft.getEnergy(freqStart, freqEnd);
-              
-              smoothedAmplitudes[i] = (amp * (1 - settings.spectrumSmoothing)) + (smoothedAmplitudes[i] * settings.spectrumSmoothing);
-              const smoothedAmp = smoothedAmplitudes[i];
-
-              let barColor;
-              const ampNormalized = smoothedAmp / 255.0;
-              if (ampNormalized < 0.5) {
-                  barColor = lerpColor(lowColor, midColor, ampNormalized * 2);
-              } else {
-                  barColor = lerpColor(midColor, highColor, (ampNormalized - 0.5) * 2);
-              }
-
-              if (quality.glow) {
-                drawingContext.shadowColor = barColor;
-              }
-              fill(barColor); 
-              
-              const barHeight = map(smoothedAmp, 0, 255, 0, height / 2);
-              const x = i * barWidth;
-              
-              rect(x, 0, barWidth, barHeight, 0, 0, cornerRadius, cornerRadius);
-              rect(x, height, barWidth, -barHeight, cornerRadius, cornerRadius, 0, 0);
-          }
-      }
-
-      drawingContext.shadowBlur = 0;
-      colorMode(RGB); // Reset to default color mode
 
       // --- Physics & Audio Updates ---
       for (const spring of springs) {
@@ -354,6 +276,7 @@
       }
       
       // --- Waveform Visualization (Drawn on top) ---
+      fft.analyze();
       const waveform = fft.waveform();
       const waveformWidth = width * 0.8;
       const waveformHeight = 200; 
@@ -373,7 +296,7 @@
 
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
-      initializeBobsAndSprings();
+      setupSimulation(true); // Full reset
     }
     
     // --- Input Handling ---
@@ -497,53 +420,54 @@
     }
 
     // --- Initialization & Updates ---
-
-    function updateVisualizerSettings() {
-        const quality = qualityProfiles[settings.visualizerQuality];
-        currentNumBars = quality.numBars;
-        // Resize smoothedAmplitudes array, filling new spots with 0
-        smoothedAmplitudes = new Array(currentNumBars).fill(0);
-    }
-
-    function initializeBobsAndSprings() {
-      // Stop and dispose of old oscillators before creating new ones
-      for (const bob of bobs) {
-        if (bob.osc) {
-          bob.osc.disconnect();
-          bob.osc.stop();
-        }
-      }
-      
-      bobs = [];
-      springs = [];
-      draggedItems.clear();
-
-      const spacing = width / (NUM_BOBS + 1);
+    
+    function setupSimulation(resetPhysics = false) {
       const scaleIntervals = scales[settings.selectedScale];
       const numIntervals = scaleIntervals.length;
 
-      for (let i = 0; i < NUM_BOBS; i++) {
-        const x = spacing * (i + 1);
-        const anchorY = height / 2;
-        
-        const octave = Math.floor(i / numIntervals);
-        const noteInScale = i % numIntervals;
+      // This function calculates the frequency for a bob at a given index
+      const getFrequencyForIndex = (index) => {
+        const octave = Math.floor(index / numIntervals);
+        const noteInScale = index % numIntervals;
         const interval = scaleIntervals[noteInScale];
         const midiNote = settings.baseMidiNote + (octave * 12) + interval;
-        const freq = midiToFreq(midiNote);
+        return midiToFreq(midiNote);
+      };
 
-        let bob = new Bob(x, anchorY, freq);
-        bobs.push(bob);
+      if (resetPhysics) {
+        // Stop and dispose of old oscillators
+        for (const bob of bobs) {
+          if (bob.osc) {
+            bob.osc.disconnect();
+            bob.osc.stop();
+          }
+        }
+        
+        bobs = [];
+        springs = [];
+        draggedItems.clear();
 
-        let anchor = createVector(x, anchorY);
-        let spring = new Spring(anchor, bob, 0);
-        springs.push(spring);
-      }
-      
-      if (bobs.length > 0) {
-        const frequencies = bobs.map(bob => bob.osc.getFreq());
-        minFreq = Math.min(...frequencies);
-        maxFreq = Math.max(...frequencies);
+        const spacing = width / (NUM_BOBS + 1);
+        for (let i = 0; i < NUM_BOBS; i++) {
+          const x = spacing * (i + 1);
+          const anchorY = height / 2;
+          const freq = getFrequencyForIndex(i);
+
+          let bob = new Bob(x, anchorY, freq);
+          bobs.push(bob);
+
+          let anchor = createVector(x, anchorY);
+          let spring = new Spring(anchor, bob, 0);
+          springs.push(spring);
+        }
+      } else { // Just update frequencies of existing bobs
+        if (bobs.length === 0) return; // Guard against running before setup
+        for (let i = 0; i < bobs.length; i++) {
+          const freq = getFrequencyForIndex(i);
+          if (bobs[i].osc) {
+            bobs[i].osc.freq(freq);
+          }
+        }
       }
     }
   </script>
