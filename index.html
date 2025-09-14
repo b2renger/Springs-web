@@ -59,9 +59,9 @@
         reverbEnabled: false,
         reverbMix: 0.5,
         reverbDecay: 3,
-        distortionEnabled: false,
-        distortionAmount: 0.25,
-        distortionMix: 0.5,
+        crunchEnabled: false,
+        crunchAmount: 0.4,
+        crunchMix: 0.5,
     };
 
     // --- Global State ---
@@ -71,7 +71,7 @@
     const draggedItems = new Map();
     let audioInitialized = false;
     let gui;
-    let reverb, distortion, fft;
+    let reverb, crunch, midCutFilter, fft;
 
     // --- Classes ---
 
@@ -93,7 +93,7 @@
         
         // Connect to the effects chain
         this.osc.disconnect();
-        this.osc.connect(distortion);
+        this.osc.connect(crunch);
         
         this.osc.start();
       }
@@ -173,13 +173,21 @@
       createCanvas(windowWidth, windowHeight);
       
       // --- Audio Effects Setup ---
-      distortion = new p5.Distortion();
+      crunch = new p5.Distortion();
+      midCutFilter = new p5.Filter('peaking');
       reverb = new p5.Reverb();
       fft = new p5.FFT();
       
-      // Chain: distortion -> reverb -> master output
-      distortion.disconnect(); // Disconnect from master to connect to reverb
-      distortion.connect(reverb);
+      // Configure the mid-cut filter for a warmer, less harsh sound
+      midCutFilter.freq(900); // Center frequency for mid-range cut
+      midCutFilter.gain(-9);  // Cut mid frequencies by 9 dB for a warmer sound
+      midCutFilter.res(1.5);  // Moderate bandwidth for the cut
+
+      // Chain: crunch -> midCutFilter -> reverb -> master output
+      crunch.disconnect();
+      crunch.connect(midCutFilter);
+      midCutFilter.disconnect();
+      midCutFilter.connect(reverb);
       
       setupSimulation(true); // Full reset
 
@@ -227,24 +235,24 @@
         reverb.set(value);
       });
       
-      const distortionFolder = effectsFolder.addFolder('Distortion');
-      distortionFolder.add(effectSettings, 'distortionEnabled').name('Enabled').onChange(value => {
-        distortion.drywet(value ? effectSettings.distortionMix : 0);
+      const crunchFolder = effectsFolder.addFolder('Crunch');
+      crunchFolder.add(effectSettings, 'crunchEnabled').name('Enabled').onChange(value => {
+        crunch.drywet(value ? effectSettings.crunchMix : 0);
       });
-      distortionFolder.add(effectSettings, 'distortionAmount', 0, 1).name('Amount').onChange(value => {
-        distortion.set(value, '2x');
+      crunchFolder.add(effectSettings, 'crunchAmount', 0, 1).name('Amount').onChange(value => {
+        crunch.set(value, 'none'); // Use 'none' for a warmer clip
       });
-      distortionFolder.add(effectSettings, 'distortionMix', 0, 1).name('Mix').onChange(value => {
-         if (effectSettings.distortionEnabled) {
-          distortion.drywet(value);
+      crunchFolder.add(effectSettings, 'crunchMix', 0, 1).name('Mix').onChange(value => {
+         if (effectSettings.crunchEnabled) {
+          crunch.drywet(value);
         }
       });
       
       // Initialize effect states based on settings
       reverb.set(effectSettings.reverbDecay);
       reverb.drywet(effectSettings.reverbEnabled ? effectSettings.reverbMix : 0);
-      distortion.set(effectSettings.distortionAmount, '2x');
-      distortion.drywet(effectSettings.distortionEnabled ? effectSettings.distortionMix : 0);
+      crunch.set(effectSettings.crunchAmount, 'none');
+      crunch.drywet(effectSettings.crunchEnabled ? effectSettings.crunchMix : 0);
     }
     
     function draw() {
@@ -451,7 +459,7 @@
         const totalGaps = NUM_BOBS + 1;
         const availableWidthForBobs = width - (totalGaps * MIN_GAP);
         const bobDiameter = availableWidthForBobs / NUM_BOBS;
-        const bobRadius = Math.max(5, bobDiameter / 2);
+        const bobRadius = Math.max(5, (bobDiameter * 0.75) / 2);
 
         for (let i = 0; i < NUM_BOBS; i++) {
           const x = MIN_GAP + bobRadius + i * (bobDiameter + MIN_GAP);
