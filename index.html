@@ -179,6 +179,12 @@
       fft = new p5.FFT();
       compressor = new p5.Compressor();
       
+      // Configure compressor for better dynamic range control (avoid clipping)
+      compressor.threshold(-24); // Start compressing early to manage sum of multiple voices
+      compressor.ratio(12);      // High ratio to act as a limiter for peaks
+      compressor.attack(0.003);  // Fast attack to catch transients
+      compressor.release(0.25);  // Smooth release
+
       // Configure the mid-cut filter for a warmer, less harsh sound
       midCutFilter.freq(900); // Center frequency for mid-range cut
       midCutFilter.gain(-9);  // Cut mid frequencies by 9 dB for a warmer sound
@@ -272,7 +278,10 @@
         let normalizedDistance = map(distance, 0, height / 2, 0, 1);
         normalizedDistance = constrain(normalizedDistance, 0, 1);
 
-        let volume = Math.pow(normalizedDistance, 2) * 0.15;
+        // Improved volume curve:
+        // Use power of 1.5 instead of 2 to make lower volumes more audible (gentler curve).
+        // Boost multiplier to 0.35 (was 0.15) to use more headroom, relying on compressor to prevent clipping.
+        let volume = Math.pow(normalizedDistance, 1.5) * 0.35;
         
         if (bob.osc) {
             bob.osc.amp(volume, 0.05);
