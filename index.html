@@ -71,7 +71,7 @@
     const draggedItems = new Map();
     let audioInitialized = false;
     let gui;
-    let reverb, crunch, midCutFilter, fft, compressor;
+    let reverb, crunch, midCutFilter, compressor;
 
     // --- Classes ---
 
@@ -121,10 +121,18 @@
 
       // Draw the bob on the canvas
       display() {
-        stroke(255);
-        strokeWeight(2);
-        fill(255);
-        ellipse(this.position.x, this.position.y, this.radius * 2, this.radius * 2);
+        // Apply Bloom
+        drawingContext.shadowBlur = 30;
+        drawingContext.shadowColor = 'rgba(255, 255, 255, 0.5)';
+
+        //stroke(255);
+        //strokeWeight(2);
+        noStroke();
+        fill(255,200);
+        ellipse(this.position.x, this.position.y, this.radius * 1.7, this.radius * 1.7);
+
+        // Reset bloom so it doesn't affect other elements inadvertently
+        drawingContext.shadowBlur = 0;
       }
 
       // Check if a point (x, y) is inside the bob
@@ -176,7 +184,6 @@
       crunch = new p5.Distortion();
       midCutFilter = new p5.Filter('peaking');
       reverb = new p5.Reverb();
-      fft = new p5.FFT();
       compressor = new p5.Compressor();
       
       // Configure compressor for better dynamic range control (avoid clipping)
@@ -265,7 +272,8 @@
     }
     
     function draw() {
-      background(0);
+      // Semi-transparent background for soft ghost trails/blur
+      background(0, 70);
 
       // --- Physics & Audio Updates ---
       for (const spring of springs) {
@@ -292,25 +300,6 @@
       for (const bob of bobs) {
         bob.update();
         bob.display();
-      }
-      
-      // --- Waveform Visualization (Drawn on top) ---
-      fft.analyze();
-      const waveform = fft.waveform();
-      const waveformWidth = width;
-      const waveformHeight = 600;
-      const startX = 0;
-      const centerY = height / 2;
-
-      noStroke();
-      fill(230, 80, 80); // A warm red
-
-      const barWidth = waveformWidth / waveform.length;
-      for (let i = 0; i < waveform.length; i++) {
-        const x = startX + (i * barWidth);
-        const h = map(abs(waveform[i]), 0, 1, 0, waveformHeight);
-        const y = centerY - h / 2;
-        rect(x, y, barWidth, h);
       }
     }
 
