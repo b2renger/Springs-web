@@ -68,6 +68,7 @@
     let bobs = [];
     let springs = [];
     // A map to keep track of which input (by id) is dragging which bob.
+    // Stores object: { bob: Bob, lastX: number, lastY: number }
     const draggedItems = new Map();
     let audioInitialized = false;
     let gui;
@@ -85,6 +86,7 @@
         this.mass = settings.mass;
         this.radius = radius;
         this.isDragging = false;
+        this.isPinned = false;
         
         // --- Audio Setup ---
         this.osc = new p5.Oscillator(settings.oscillatorType);
@@ -106,17 +108,23 @@
 
       // Update the bob's physics state
       update() {
-        if (!this.isDragging) {
-          this.velocity.add(this.acceleration);
-          this.velocity.mult(settings.damping); // Use dynamic damping
-
-          // Apply additional velocity smoothing for a less jittery motion
-          const smoothingFactor = 1.0 - settings.velocitySmoothing;
-          this.smoothedVelocity.lerp(this.velocity, smoothingFactor);
-          
-          this.position.add(this.smoothedVelocity); // Use smoothed velocity
-          this.acceleration.mult(0); // Reset acceleration for the next frame
+        if (this.isDragging || this.isPinned) {
+          // Zero out physics when controlled by user or pinned
+          this.velocity.mult(0);
+          this.smoothedVelocity.mult(0);
+          this.acceleration.mult(0);
+          return;
         }
+
+        this.velocity.add(this.acceleration);
+        this.velocity.mult(settings.damping); // Use dynamic damping
+
+        // Apply additional velocity smoothing for a less jittery motion
+        const smoothingFactor = 1.0 - settings.velocitySmoothing;
+        this.smoothedVelocity.lerp(this.velocity, smoothingFactor);
+        
+        this.position.add(this.smoothedVelocity); // Use smoothed velocity
+        this.acceleration.mult(0); // Reset acceleration for the next frame
       }
 
       // Draw the bob on the canvas
@@ -322,8 +330,10 @@
         const bob = bobs[i];
         if (bob.isOver(x, y) && !draggedItems.has(id)) {
           bob.isDragging = true;
+          bob.isPinned = false; // Reset pin state on grab
           bob.position.y = y;
-          draggedItems.set(id, bob);
+          // Store both the bob and the initial cursor location
+          draggedItems.set(id, { bob: bob, lastX: x, lastY: y });
           return true;
         }
       }
@@ -331,16 +341,30 @@
     }
 
     function moveDrag(x, y, id) {
-        const draggedBob = draggedItems.get(id);
-        if (draggedBob) {
-            draggedBob.position.y = y;
+        const item = draggedItems.get(id);
+        if (item) {
+            item.lastX = x;
+            item.lastY = y;
+            item.bob.position.y = y;
         }
     }
 
     function endDrag(id) {
-        const draggedBob = draggedItems.get(id);
-        if (draggedBob) {
-            draggedBob.isDragging = false;
+        const item = draggedItems.get(id);
+        if (item) {
+            const { bob, lastX, lastY } = item;
+            
+            // Calculate distance between release point (cursor) and bob's center
+            const d = dist(lastX, lastY, bob.position.x, bob.position.y);
+            
+            // If released outside the radius, pin it. Otherwise, let it spring back.
+            if (d > bob.radius) {
+                bob.isPinned = true;
+            } else {
+                bob.isPinned = false;
+            }
+            
+            bob.isDragging = false;
             draggedItems.delete(id);
         }
     }
