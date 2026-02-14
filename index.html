@@ -12,16 +12,316 @@
       height: 100%;
       -webkit-font-smoothing: antialiased;
       background-color: #000; /* Match canvas background */
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     canvas {
       display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
     }
+    
+    /* UI Overlay Styles */
+    #ui-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      /* Full width layout, no padding/gap */
+      padding: 0;
+      gap: 0;
+      z-index: 10;
+      pointer-events: none; 
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+    }
+
+    /* Column Layout */
+    .ui-column {
+        display: flex;
+        flex-direction: column;
+        flex: 1; /* Equal thirds */
+        min-width: 0;
+        pointer-events: none;
+    }
+
+    /* Navigation Buttons */
+    .nav-btn {
+        pointer-events: auto;
+        width: 100%;
+        padding: 16px 4px; /* Taller touch target */
+        margin: 0;
+        
+        /* Glass Style - Rectangular with borders */
+        background: rgba(20, 20, 20, 0.4);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        
+        /* Borders for separation */
+        border: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+        border-right: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 0; 
+        
+        /* Text Style with Bloom */
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+        
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    /* Remove right border from last button to prevent double border or edge overflow */
+    .ui-column:last-child .nav-btn {
+        border-right: none;
+    }
+
+    .nav-btn:hover {
+        background: rgba(40, 40, 40, 0.5);
+        color: rgba(255, 255, 255, 1);
+        text-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+    }
+
+    .nav-btn.active {
+        background: rgba(60, 60, 60, 0.6);
+        color: #fff;
+        text-shadow: 0 0 15px rgba(255, 255, 255, 1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.05);
+    }
+
+    /* Panels */
+    .ui-panel {
+        pointer-events: auto;
+        width: 100%;
+        box-sizing: border-box;
+        
+        /* Glass Style */
+        background: rgba(15, 15, 15, 0.65);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        
+        /* Animation State */
+        max-height: 0;
+        padding: 0 15px; /* Horizontal padding always present, vertical animated */
+        overflow: hidden;
+        opacity: 0;
+        transition: max-height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                    padding 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+                    opacity 0.3s ease;
+    }
+    
+    .ui-column:last-child .ui-panel {
+        border-right: none;
+    }
+    
+    .ui-panel.active {
+        max-height: 60vh; /* Allow plenty of space */
+        padding-top: 20px;
+        padding-bottom: 20px;
+        opacity: 1;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+
+    /* Controls */
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .control-col {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    label {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.8rem;
+      text-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+      flex-grow: 1;
+    }
+    
+    .value-display {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.75rem;
+        font-family: monospace;
+        text-shadow: 0 0 4px rgba(255, 255, 255, 0.1);
+    }
+
+    /* Inputs */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      outline: none;
+      margin-top: 6px;
+      padding: 0;
+      box-shadow: 0 0 5px rgba(255, 255, 255, 0.05);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.8); /* Strong bloom */
+      transition: transform 0.1s;
+    }
+    input[type="range"]::-webkit-slider-thumb:active {
+        transform: scale(1.2);
+    }
+    
+    select {
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.9);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      width: 100%;
+      outline: none;
+      text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
+    }
+    select:focus {
+        border-color: rgba(255,255,255,0.5);
+        background: rgba(255,255,255,0.1);
+    }
+
+    .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #fff;
+        margin: 0;
+        cursor: pointer;
+        filter: drop-shadow(0 0 4px rgba(255,255,255,0.6));
+    }
+    
+    .disabled {
+        opacity: 0.3;
+        pointer-events: none;
+        filter: blur(1px);
+    }
+    
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19"></script>
 </head>
 <body>
+  
+  <div id="ui-container">
+    <!-- Physics Column -->
+    <div class="ui-column">
+        <button class="nav-btn" data-target="panel-physics">Physics</button>
+        <div id="panel-physics" class="ui-panel">
+            <div class="control-col">
+                <div class="control-row">
+                    <label>Stiffness</label>
+                    <span id="val-stiffness" class="value-display">0.2</span>
+                </div>
+                <input type="range" id="inp-stiffness" min="0.01" max="1.0" step="0.01" value="0.2">
+            </div>
+            <div class="control-col">
+                <div class="control-row">
+                    <label>Damping</label>
+                    <span id="val-damping" class="value-display">0.92</span>
+                </div>
+                <input type="range" id="inp-damping" min="0.8" max="0.99" step="0.001" value="0.92">
+            </div>
+            <div class="control-col">
+                <div class="control-row">
+                    <label>Mass</label>
+                    <span id="val-mass" class="value-display">20</span>
+                </div>
+                <input type="range" id="inp-mass" min="1" max="100" step="1" value="20">
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Column -->
+    <div class="ui-column">
+        <button class="nav-btn" data-target="panel-audio">Audio</button>
+        <div id="panel-audio" class="ui-panel">
+            <div class="control-col">
+                <div class="control-row">
+                    <label>Base Note</label>
+                    <span id="val-baseNote" class="value-display">48</span>
+                </div>
+                <input type="range" id="inp-baseNote" min="36" max="72" step="1" value="48">
+            </div>
+            <div class="control-col">
+                <label>Scale</label>
+                <select id="inp-scale"></select>
+            </div>
+            <div class="control-col">
+                <label>Waveform</label>
+                <select id="inp-waveform">
+                    <option value="sine">Sine</option>
+                    <option value="sawtooth">Sawtooth</option>
+                    <option value="square">Square</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Effects Column -->
+    <div class="ui-column">
+        <button class="nav-btn" data-target="panel-effects">Effects</button>
+        <div id="panel-effects" class="ui-panel">
+            <!-- Reverb -->
+            <div class="control-col">
+                <div class="checkbox-row">
+                    <input type="checkbox" id="inp-reverb-enabled">
+                    <label for="inp-reverb-enabled">Reverb</label>
+                </div>
+                <div id="grp-reverb-mix" class="control-col">
+                    <div class="control-row">
+                        <label>Mix</label>
+                    </div>
+                    <input type="range" id="inp-reverb-mix" min="0" max="1" step="0.01" value="0.5">
+                </div>
+            </div>
+            
+            <!-- Crunch -->
+            <div class="control-col" style="margin-top: 10px;">
+                <div class="checkbox-row">
+                    <input type="checkbox" id="inp-crunch-enabled">
+                    <label for="inp-crunch-enabled">Distortion</label>
+                </div>
+                <div id="grp-crunch-mix" class="control-col">
+                    <div class="control-row">
+                        <label>Mix</label>
+                    </div>
+                    <input type="range" id="inp-crunch-mix" min="0" max="1" step="0.01" value="0.5">
+                </div>
+            </div>
+        </div>
+    </div>
+  </div>
+
   <main></main>
   <script>
     // @license
@@ -45,7 +345,7 @@
         'Whole Tone': [0, 2, 4, 6, 8, 10],
     };
 
-    // --- Simulation Parameters (controlled by GUI) ---
+    // --- Simulation Parameters ---
     const settings = {
         stiffness: 0.2,
         damping: 0.92,
@@ -67,11 +367,8 @@
     // --- Global State ---
     let bobs = [];
     let springs = [];
-    // A map to keep track of which input (by id) is dragging which bob.
-    // Stores object: { bob: Bob, lastX: number, lastY: number }
     const draggedItems = new Map();
     let audioInitialized = false;
-    let gui;
     let reverb, crunch, midCutFilter, compressor;
 
     // --- Classes ---
@@ -100,16 +397,13 @@
         this.osc.start();
       }
 
-      // Apply a force to the bob
       applyForce(force) {
         let f = p5.Vector.div(force, this.mass);
         this.acceleration.add(f);
       }
 
-      // Update the bob's physics state
       update() {
         if (this.isDragging || this.isPinned) {
-          // Zero out physics when controlled by user or pinned
           this.velocity.mult(0);
           this.smoothedVelocity.mult(0);
           this.acceleration.mult(0);
@@ -117,39 +411,29 @@
         }
 
         this.velocity.add(this.acceleration);
-        this.velocity.mult(settings.damping); // Use dynamic damping
+        this.velocity.mult(settings.damping); 
 
-        // Apply additional velocity smoothing for a less jittery motion
         const smoothingFactor = 1.0 - settings.velocitySmoothing;
         this.smoothedVelocity.lerp(this.velocity, smoothingFactor);
         
-        this.position.add(this.smoothedVelocity); // Use smoothed velocity
-        this.acceleration.mult(0); // Reset acceleration for the next frame
+        this.position.add(this.smoothedVelocity); 
+        this.acceleration.mult(0); 
       }
 
-      // Draw the bob on the canvas
       display() {
-        // Apply Bloom
         drawingContext.shadowBlur = 30;
         drawingContext.shadowColor = 'rgba(255, 255, 255, 0.5)';
-
-        //stroke(255);
-        //strokeWeight(2);
         noStroke();
         fill(255,200);
         ellipse(this.position.x, this.position.y, this.radius * 1.7, this.radius * 1.7);
-
-        // Reset bloom so it doesn't affect other elements inadvertently
         drawingContext.shadowBlur = 0;
       }
 
-      // Check if a point (x, y) is inside the bob
       isOver(x, y) {
         return dist(x, y, this.position.x, this.position.y) < this.radius;
       }
     }
 
-    // Represents a spring connecting a static anchor point to a bob
     class Spring {
       constructor(anchor, bob, restLength) {
         this.anchor = anchor; // p5.Vector
@@ -158,25 +442,17 @@
         this.stiffness = settings.stiffness;
       }
 
-      // Calculate and apply the spring force to the bob
       update() {
-        // Calculate the vertical displacement from the rest length
         let displacement = this.bob.position.y - this.anchor.y;
         let stretch = displacement - this.restLength;
-
-        // Apply Hooke's Law: F = -k * x
         let forceY = -1 * this.stiffness * stretch;
         this.bob.applyForce(createVector(0, forceY));
       }
 
-      // Draw the spring and its anchor point
       display() {
-        // Draw the anchor
         fill(100);
         noStroke();
         ellipse(this.anchor.x, this.anchor.y, 10, 10);
-
-        // Draw the spring line
         stroke(200, 150);
         strokeWeight(2);
         line(this.anchor.x, this.anchor.y, this.bob.position.x, this.bob.position.y);
@@ -194,18 +470,15 @@
       reverb = new p5.Reverb();
       compressor = new p5.Compressor();
       
-      // Configure compressor for better dynamic range control (avoid clipping)
-      compressor.threshold(-24); // Start compressing early to manage sum of multiple voices
-      compressor.ratio(12);      // High ratio to act as a limiter for peaks
-      compressor.attack(0.003);  // Fast attack to catch transients
-      compressor.release(0.25);  // Smooth release
+      compressor.threshold(-24);
+      compressor.ratio(12);
+      compressor.attack(0.003);
+      compressor.release(0.25);
 
-      // Configure the mid-cut filter for a warmer, less harsh sound
-      midCutFilter.freq(900); // Center frequency for mid-range cut
-      midCutFilter.gain(-9);  // Cut mid frequencies by 9 dB for a warmer sound
-      midCutFilter.res(1.5);  // Moderate bandwidth for the cut
+      midCutFilter.freq(900);
+      midCutFilter.gain(-9);
+      midCutFilter.res(1.5);
 
-      // Chain: crunch -> midCutFilter -> reverb -> compressor -> master output
       crunch.disconnect();
       crunch.connect(midCutFilter);
       midCutFilter.disconnect();
@@ -213,90 +486,25 @@
       reverb.disconnect();
       reverb.connect(compressor);
       
-      setupSimulation(true); // Full reset
-
-      // --- GUI Setup ---
-      gui = new lil.GUI();
-      
-      const physicsFolder = gui.addFolder('Physics');
-      physicsFolder.add(settings, 'stiffness', 0.01, 1.0).onChange(value => {
-        for (const spring of springs) {
-            spring.stiffness = value;
-        }
-      });
-      physicsFolder.add(settings, 'damping', 0.8, 1.0);
-      physicsFolder.add(settings, 'velocitySmoothing', 0, 0.99).name('Smoothing');
-      physicsFolder.add(settings, 'mass', 1, 100).onChange(value => {
-        for (const bob of bobs) {
-            bob.mass = value;
-        }
-      });
-      
-      const audioFolder = gui.addFolder('Audio');
-      audioFolder.add(settings, 'baseMidiNote', 36, 72, 1).name('Base MIDI Note').onChange(() => setupSimulation());
-      audioFolder.add(settings, 'selectedScale', Object.keys(scales)).name('Scale').onChange(() => setupSimulation());
-      audioFolder.add(settings, 'oscillatorType', ['sine', 'sawtooth', 'square']).name('Waveform').onChange(value => {
-        for (const bob of bobs) {
-            if (bob.osc) {
-                bob.osc.setType(value);
-            }
-        }
-      });
-
-      // --- Effects GUI ---
-      const effectsFolder = gui.addFolder('Effects');
-      
-      const reverbFolder = effectsFolder.addFolder('Reverb');
-      reverbFolder.add(effectSettings, 'reverbEnabled').name('Enabled').onChange(value => {
-        reverb.drywet(value ? effectSettings.reverbMix : 0);
-      });
-      reverbFolder.add(effectSettings, 'reverbMix', 0, 1).name('Mix').onChange(value => {
-        if (effectSettings.reverbEnabled) {
-          reverb.drywet(value);
-        }
-      });
-      reverbFolder.add(effectSettings, 'reverbDecay', 0, 10).name('Decay').onChange(value => {
-        reverb.set(value);
-      });
-      
-      const crunchFolder = effectsFolder.addFolder('Crunch');
-      crunchFolder.add(effectSettings, 'crunchEnabled').name('Enabled').onChange(value => {
-        crunch.drywet(value ? effectSettings.crunchMix : 0);
-      });
-      crunchFolder.add(effectSettings, 'crunchAmount', 0, 1).name('Amount').onChange(value => {
-        crunch.set(value, 'none'); // Use 'none' for a warmer clip
-      });
-      crunchFolder.add(effectSettings, 'crunchMix', 0, 1).name('Mix').onChange(value => {
-         if (effectSettings.crunchEnabled) {
-          crunch.drywet(value);
-        }
-      });
-      
-      // Initialize effect states based on settings
+      // Initialize effect states based on defaults
       reverb.set(effectSettings.reverbDecay);
       reverb.drywet(effectSettings.reverbEnabled ? effectSettings.reverbMix : 0);
       crunch.set(effectSettings.crunchAmount, 'none');
       crunch.drywet(effectSettings.crunchEnabled ? effectSettings.crunchMix : 0);
+
+      setupSimulation(true);
+      setupUI();
     }
     
     function draw() {
-      // Semi-transparent background for soft ghost trails/blur
       background(0, 70);
 
-      // --- Physics & Audio Updates ---
       for (const spring of springs) {
         spring.update();
-        // spring.display(); // Do not draw the spring or anchor
-        
         const bob = spring.bob;
         const distance = abs(bob.position.y - spring.anchor.y);
-        
         let normalizedDistance = map(distance, 0, height / 2, 0, 1);
         normalizedDistance = constrain(normalizedDistance, 0, 1);
-
-        // Improved volume curve:
-        // Use power of 1.5 instead of 2 to make lower volumes more audible (gentler curve).
-        // Boost multiplier to 0.35 (was 0.15) to use more headroom, relying on compressor to prevent clipping.
         let volume = Math.pow(normalizedDistance, 1.5) * 0.35;
         
         if (bob.osc) {
@@ -304,7 +512,6 @@
         }
       }
 
-      // --- Bob Drawing ---
       for (const bob of bobs) {
         bob.update();
         bob.display();
@@ -313,8 +520,130 @@
 
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
-      setupSimulation(true); // Full reset
+      setupSimulation(true); 
     }
+
+    // --- UI Logic ---
+    function setupUI() {
+        const navBtns = document.querySelectorAll('.nav-btn');
+
+        navBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetId = btn.getAttribute('data-target');
+                const panel = document.getElementById(targetId);
+                
+                // Toggle independent state
+                btn.classList.toggle('active');
+                panel.classList.toggle('active');
+            });
+        });
+
+        // --- Physics Controls ---
+        const inpStiffness = document.getElementById('inp-stiffness');
+        const valStiffness = document.getElementById('val-stiffness');
+        inpStiffness.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            settings.stiffness = val;
+            valStiffness.innerText = val.toFixed(2);
+            for(const spring of springs) spring.stiffness = val;
+        });
+
+        const inpDamping = document.getElementById('inp-damping');
+        const valDamping = document.getElementById('val-damping');
+        inpDamping.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            settings.damping = val;
+            valDamping.innerText = val.toFixed(3);
+        });
+
+        const inpMass = document.getElementById('inp-mass');
+        const valMass = document.getElementById('val-mass');
+        inpMass.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            settings.mass = val;
+            valMass.innerText = val;
+            for(const bob of bobs) bob.mass = val;
+        });
+
+        // --- Audio Controls ---
+        const inpBaseNote = document.getElementById('inp-baseNote');
+        const valBaseNote = document.getElementById('val-baseNote');
+        inpBaseNote.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            settings.baseMidiNote = val;
+            valBaseNote.innerText = val;
+            setupSimulation();
+        });
+
+        const inpScale = document.getElementById('inp-scale');
+        for (const scaleName of Object.keys(scales)) {
+            const opt = document.createElement('option');
+            opt.value = scaleName;
+            opt.innerText = scaleName;
+            inpScale.appendChild(opt);
+        }
+        inpScale.value = settings.selectedScale;
+        inpScale.addEventListener('change', (e) => {
+            settings.selectedScale = e.target.value;
+            setupSimulation();
+        });
+
+        const inpWaveform = document.getElementById('inp-waveform');
+        inpWaveform.value = settings.oscillatorType;
+        inpWaveform.addEventListener('change', (e) => {
+            settings.oscillatorType = e.target.value;
+             for (const bob of bobs) {
+                if (bob.osc) bob.osc.setType(settings.oscillatorType);
+            }
+        });
+
+        // --- Effects Controls ---
+        
+        // Reverb
+        const chkReverb = document.getElementById('inp-reverb-enabled');
+        const grpReverbMix = document.getElementById('grp-reverb-mix');
+        const inpReverbMix = document.getElementById('inp-reverb-mix');
+        
+        chkReverb.checked = effectSettings.reverbEnabled;
+        if (!effectSettings.reverbEnabled) grpReverbMix.classList.add('disabled');
+
+        chkReverb.addEventListener('change', (e) => {
+            effectSettings.reverbEnabled = e.target.checked;
+            reverb.drywet(effectSettings.reverbEnabled ? effectSettings.reverbMix : 0);
+            if(e.target.checked) grpReverbMix.classList.remove('disabled');
+            else grpReverbMix.classList.add('disabled');
+        });
+
+        inpReverbMix.value = effectSettings.reverbMix;
+        inpReverbMix.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            effectSettings.reverbMix = val;
+            if (effectSettings.reverbEnabled) reverb.drywet(val);
+        });
+
+        // Crunch
+        const chkCrunch = document.getElementById('inp-crunch-enabled');
+        const grpCrunchMix = document.getElementById('grp-crunch-mix');
+        const inpCrunchMix = document.getElementById('inp-crunch-mix');
+
+        chkCrunch.checked = effectSettings.crunchEnabled;
+        if (!effectSettings.crunchEnabled) grpCrunchMix.classList.add('disabled');
+
+        chkCrunch.addEventListener('change', (e) => {
+            effectSettings.crunchEnabled = e.target.checked;
+            crunch.drywet(effectSettings.crunchEnabled ? effectSettings.crunchMix : 0);
+            if(e.target.checked) grpCrunchMix.classList.remove('disabled');
+            else grpCrunchMix.classList.add('disabled');
+        });
+
+        inpCrunchMix.value = effectSettings.crunchMix;
+        inpCrunchMix.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            effectSettings.crunchMix = val;
+            if (effectSettings.crunchEnabled) crunch.drywet(val);
+        });
+    }
+
     
     // --- Input Handling ---
 
@@ -330,9 +659,8 @@
         const bob = bobs[i];
         if (bob.isOver(x, y) && !draggedItems.has(id)) {
           bob.isDragging = true;
-          bob.isPinned = false; // Reset pin state on grab
+          bob.isPinned = false; 
           bob.position.y = y;
-          // Store both the bob and the initial cursor location
           draggedItems.set(id, { bob: bob, lastX: x, lastY: y });
           return true;
         }
@@ -353,11 +681,8 @@
         const item = draggedItems.get(id);
         if (item) {
             const { bob, lastX, lastY } = item;
-            
-            // Calculate distance between release point (cursor) and bob's center
             const d = dist(lastX, lastY, bob.position.x, bob.position.y);
             
-            // If released outside the radius, pin it. Otherwise, let it spring back.
             if (d > bob.radius) {
                 bob.isPinned = true;
             } else {
@@ -369,36 +694,32 @@
         }
     }
 
-    // Mouse Events
+    // --- Mouse/Touch Helpers to block p5 canvas interaction if UI is touched ---
+
     function mousePressed(event) {
-      if (event && event.target && typeof event.target.closest === 'function' && event.target.closest('.lil-gui')) {
-        return;
-      }
+      // Check if clicking inside UI elements (buttons or panels)
+      if (event && event.target && (event.target.closest('.nav-btn') || event.target.closest('.ui-panel'))) return;
+
       startAudio();
       startDrag(mouseX, mouseY, 'mouse');
       return false;
     }
 
     function mouseDragged(event) {
-      if (event && event.target && typeof event.target.closest === 'function' && event.target.closest('.lil-gui')) {
-        return;
-      }
+      if (event && event.target && (event.target.closest('.nav-btn') || event.target.closest('.ui-panel'))) return;
       moveDrag(mouseX, mouseY, 'mouse');
       return false;
     }
 
     function mouseReleased(event) {
-      if (event && event.target && typeof event.target.closest === 'function' && event.target.closest('.lil-gui')) {
-        return;
-      }
+      if (event && event.target && (event.target.closest('.nav-btn') || event.target.closest('.ui-panel'))) return;
       endDrag('mouse');
       return false;
     }
 
-    // Touch Events for Mobile Support
     function touchStarted(event) {
-      if (event && event.target && event.target.closest('.lil-gui')) {
-        return true;
+      if (event && event.target && (event.target.closest('.nav-btn') || event.target.closest('.ui-panel'))) {
+        return true; // allow default UI interaction
       }
 
       startAudio();
@@ -414,7 +735,7 @@
     }
 
     function touchMoved(event) {
-      if (event && event.target && event.target.closest('.lil-gui')) {
+      if (event && event.target && (event.target.closest('.nav-btn') || event.target.closest('.ui-panel'))) {
         return true;
       }
       
@@ -430,7 +751,7 @@
     }
 
     function touchEnded(event) {
-      if (event && event.target && event.target.closest('.lil-gui')) {
+      if (event && event.target && (event.target.closest('.nav-btn') || event.target.closest('.ui-panel'))) {
         return true;
       }
       
@@ -458,7 +779,6 @@
       const scaleIntervals = scales[settings.selectedScale];
       const numIntervals = scaleIntervals.length;
 
-      // This function calculates the frequency for a bob at a given index
       const getFrequencyForIndex = (index) => {
         const octave = Math.floor(index / numIntervals);
         const noteInScale = index % numIntervals;
@@ -468,7 +788,6 @@
       };
 
       if (resetPhysics) {
-        // Stop and dispose of old oscillators
         for (const bob of bobs) {
           if (bob.osc) {
             bob.osc.disconnect();
@@ -480,7 +799,6 @@
         springs = [];
         draggedItems.clear();
 
-        // Dynamically calculate bob radius based on screen width
         const totalGaps = NUM_BOBS + 1;
         const availableWidthForBobs = width - (totalGaps * MIN_GAP);
         const bobDiameter = availableWidthForBobs / NUM_BOBS;
@@ -498,8 +816,8 @@
           let spring = new Spring(anchor, bob, 0);
           springs.push(spring);
         }
-      } else { // Just update frequencies of existing bobs
-        if (bobs.length === 0) return; // Guard against running before setup
+      } else { 
+        if (bobs.length === 0) return;
         for (let i = 0; i < bobs.length; i++) {
           const freq = getFrequencyForIndex(i);
           if (bobs[i].osc) {
